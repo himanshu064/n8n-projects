@@ -1,6 +1,4 @@
 # Environment variables / secrets
-.env
-.env.*
 !.env.example
 
 # Python
@@ -14,7 +12,6 @@ venv/
 .DS_Store
 
 # Editor
-.vscode/
 .idea/
 
 # Logs
@@ -24,3 +21,5 @@ venv/
 running-order-sample.xlsx
 
 .claude
+config.bat
+node_modules
