@@ -1,0 +1,537 @@
+{
+  "name": "LinkedIn - 4 Daily Publisher",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## WF4 - Daily Publisher (9:00 AM IST, or press the demo button)\n1. PATCH today's row approved -> publishing (double-publish guard). No approved row = nothing happens.\n2. Append the post to the Google Sheet (tab from Config: test first, publish_queue when live).\n3. Mark row published, or publish_failed + Slack alert.\n\nDemo: set Config.override_date (e.g. 2026-08-24) to publish a specific approved post instead of today's.\nReplace C0BRXF8G5FY in Alert Failure.",
+        "height": 260,
+        "width": 1000,
+        "color": 6
+      },
+      "name": "Note e90725",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -32,
+        -176
+      ],
+      "id": "1691daa3-1fb4-42b1-a0e8-7f089dffe89e"
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "triggerAtHour": 9
+            }
+          ]
+        }
+      },
+      "name": "Daily 9 AM IST",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        32,
+        240
+      ],
+      "id": "a3d31825-b740-40e7-acc9-972fe25f2c0a"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "a1",
+              "name": "sheet_id",
+              "value": "13FRF4hMZyGTdNEQ34fjpUOyDhktqB-XL1HXAgGfwuRM",
+              "type": "string"
+            },
+            {
+              "id": "a2",
+              "name": "sheet_tab",
+              "value": "test",
+              "type": "string"
+            },
+            {
+              "id": "a3",
+              "name": "supabase_url",
+              "value": "https://ttexzguqbewayozgmojf.supabase.co",
+              "type": "string"
+            },
+            {
+              "id": "a4",
+              "name": "override_date",
+              "value": "",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "Config",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        256,
+        240
+      ],
+      "id": "4bf5f5fc-f592-4c81-806c-ea04936982ad"
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "={{ $json.supabase_url }}/rest/v1/linkedin_posts?scheduled_date=eq.{{ $json.override_date || $now.toFormat('yyyy-MM-dd') }}&status=eq.approved&select=*,linkedin_running_order(process_name,style)",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "supabaseApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Prefer",
+              "value": "return=representation"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ status: 'publishing', updated_at: $now.toISO() }) }}",
+        "options": {}
+      },
+      "name": "Claim Today's Post",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        464,
+        240
+      ],
+      "id": "9168b85b-f687-4b93-b2f0-0d7d0d78ad2f",
+      "credentials": {
+        "supabaseApi": {
+          "id": "VGf8DmNx8k99Z696",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "c1",
+              "leftValue": "={{ $json.id !== undefined && $json.id !== null }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "name": "Got a Post?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        688,
+        240
+      ],
+      "id": "d31a81e5-d6b0-43ad-bd9d-9e69e9f8d689"
+    },
+    {
+      "parameters": {},
+      "name": "Nothing To Publish",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        912,
+        400
+      ],
+      "id": "b6286954-4895-450d-b2fd-624b3ebfbb9e"
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $('Config').first().json.sheet_id }}"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "={{ $('Config').first().json.sheet_tab }}"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "style": "={{ $json.linkedin_running_order.style }}",
+            "process": "={{ $json.linkedin_running_order.process_name }}",
+            "publish_date": "={{ $json.scheduled_date }} ",
+            "post_text": "={{ $json.post_text }}",
+            "qa_result": "={{ ($json.qa_feedback?.approved ? 'pass' : 'manual_review') + ' (score ' + $json.qa_score + ')' }}",
+            "qa_notes": "={{ $json.qa_feedback?.feedback ?? '' }}    ",
+            "approved_by": "={{ $json.approved_by ?? '' }}    ",
+            "approved_at": "={{ $json.approved_at ?? '' }} ",
+            "queued_at": "={{ $now.toISO() }} ",
+            "status": "added"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "publish_date",
+              "displayName": "publish_date",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "post_text",
+              "displayName": "post_text",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "style",
+              "displayName": "style",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "process",
+              "displayName": "process",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "qa_result",
+              "displayName": "qa_result",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "qa_notes",
+              "displayName": "qa_notes",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "approved_by",
+              "displayName": "approved_by",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "approved_at",
+              "displayName": "approved_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "queued_at",
+              "displayName": "queued_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "status",
+              "displayName": "status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "name": "Append To Publish Queue",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        912,
+        144
+      ],
+      "id": "1f8264c6-756c-40f4-82bc-1cb03fd72ee8",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "4xC1Nm9fJ58NzyRn",
+          "name": "Google Sheets account"
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "tableId": "linkedin_posts",
+        "filterType": "string",
+        "filterString": "=id=eq.{{ $('Claim Today\\'s Post').item.json.id }}",
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "status",
+              "fieldValue": "published"
+            },
+            {
+              "fieldId": "published_at",
+              "fieldValue": "={{ $now.toISO() }}"
+            },
+            {
+              "fieldId": "publish_ref",
+              "fieldValue": "=google_sheet:{{ $('Config').first().json.sheet_tab }}"
+            },
+            {
+              "fieldId": "updated_at",
+              "fieldValue": "={{ $now.toISO() }}"
+            }
+          ]
+        }
+      },
+      "name": "Mark Published",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        1136,
+        48
+      ],
+      "id": "2fe79664-8512-4274-812e-a00adce2ff0f",
+      "credentials": {
+        "supabaseApi": {
+          "id": "VGf8DmNx8k99Z696",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "tableId": "linkedin_posts",
+        "filterType": "string",
+        "filterString": "=id=eq.{{ $('Claim Today\\'s Post').item.json.id }}",
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "status",
+              "fieldValue": "publish_failed"
+            },
+            {
+              "fieldId": "error_detail",
+              "fieldValue": "={{ JSON.stringify($json.error ?? $json).slice(0, 2000) }}"
+            },
+            {
+              "fieldId": "updated_at",
+              "fieldValue": "={{ $now.toISO() }}"
+            }
+          ]
+        }
+      },
+      "name": "Mark Failed",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        1136,
+        240
+      ],
+      "id": "ded03868-89b6-48a8-9140-fd74338022a2",
+      "credentials": {
+        "supabaseApi": {
+          "id": "VGf8DmNx8k99Z696",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "C0BRXF8G5FY"
+        },
+        "text": "=🚨 Publish failed for {{ $('Config').first().json.override_date || $now.toFormat('yyyy-MM-dd') }} - row marked publish_failed. Check n8n executions.",
+        "otherOptions": {}
+      },
+      "name": "Alert Failure",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.3,
+      "position": [
+        1344,
+        240
+      ],
+      "id": "75bacb5c-49e4-497e-8e44-b2c6152a8e7b",
+      "webhookId": "1ee4adcd-fdaf-43d1-bbab-64935dd49877",
+      "credentials": {
+        "slackApi": {
+          "id": "lWA8K310HPOqMpjh",
+          "name": "Slack account"
+        }
+      }
+    },
+    {
+      "parameters": {},
+      "name": "Run Now (demo button)",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        32,
+        64
+      ],
+      "id": "b527908e-a6d1-43db-b410-24af51e3924a"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Config": {
+      "main": [
+        [
+          {
+            "node": "Claim Today's Post",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Claim Today's Post": {
+      "main": [
+        [
+          {
+            "node": "Got a Post?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Got a Post?": {
+      "main": [
+        [
+          {
+            "node": "Append To Publish Queue",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Nothing To Publish",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Append To Publish Queue": {
+      "main": [
+        [
+          {
+            "node": "Mark Published",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Mark Failed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark Failed": {
+      "main": [
+        [
+          {
+            "node": "Alert Failure",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Daily 9 AM IST": {
+      "main": [
+        [
+          {
+            "node": "Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run Now (demo button)": {
+      "main": [
+        [
+          {
+            "node": "Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "3ffc89ff-7302-4bf5-a854-4e01df473f48",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "6af2903b4dbb761a67d465cd1d34829029abeb1b3b7e8d9193566eaad571a21d"
+  },
+  "nodeGroups": [],
+  "id": "BmNW2q2tBB736kyk",
+  "tags": []
+}

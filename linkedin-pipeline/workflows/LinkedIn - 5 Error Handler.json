@@ -1,0 +1,70 @@
+{
+  "name": "LinkedIn - 5 Error Handler",
+  "nodes": [
+    {
+      "parameters": {},
+      "name": "Error Trigger",
+      "type": "n8n-nodes-base.errorTrigger",
+      "typeVersion": 1,
+      "position": [
+        32,
+        -16
+      ],
+      "id": "5573ec4b-fb54-40a9-9c9f-81519b0a3cf3"
+    },
+    {
+      "parameters": {
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "C0BRXF8G5FY"
+        },
+        "text": "=🚨 Workflow \"{{ $json.workflow.name }}\" failed at node \"{{ $json.execution.lastNodeExecuted }}\": {{ $json.execution.error.message }}\n{{ $json.execution.url }}",
+        "otherOptions": {}
+      },
+      "name": "Alert Slack",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.3,
+      "position": [
+        256,
+        -16
+      ],
+      "id": "954d2731-aaa3-4446-a1bc-e50b9dad5f4a",
+      "webhookId": "33332352-a65a-4253-a961-6274e69853b2",
+      "credentials": {
+        "slackApi": {
+          "id": "lWA8K310HPOqMpjh",
+          "name": "Slack account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Error Trigger": {
+      "main": [
+        [
+          {
+            "node": "Alert Slack",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "90913744-e4a7-4552-b7f1-d28d24e59555",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "6af2903b4dbb761a67d465cd1d34829029abeb1b3b7e8d9193566eaad571a21d"
+  },
+  "nodeGroups": [],
+  "id": "SQnMVoySRJgU9XOI",
+  "tags": []
+}

@@ -1,0 +1,184 @@
+{
+  "name": "LinkedIn - 3 Approval Listener",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## WF3 — Approval Listener\nSlack Trigger on `reaction_added`. Only the founder's ✅ (`white_check_mark`) counts.\nMatches the row by `slack_message_ts` and flips `awaiting_approval` → `approved`.\nReactions on unrelated messages match no row → nothing happens.\n\nSlack app needs Event Subscriptions → bot event `reaction_added` pointed at this trigger's URL.",
+        "height": 220,
+        "width": 900,
+        "color": 6
+      },
+      "name": "Note fed4bb",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        928,
+        -192
+      ],
+      "id": "b2fd49ca-dff8-40a5-84e6-803b28325c87"
+    },
+    {
+      "parameters": {
+        "trigger": [
+          "reaction_added"
+        ],
+        "watchWorkspace": true,
+        "options": {}
+      },
+      "name": "Reaction Added",
+      "type": "n8n-nodes-base.slackTrigger",
+      "typeVersion": 1,
+      "position": [
+        976,
+        80
+      ],
+      "webhookId": "116adef6-33ba-45fa-8172-0170ba996466",
+      "id": "865ad48e-73be-4f47-9ee7-e5c1d7dd1f40",
+      "credentials": {
+        "slackApi": {
+          "id": "lWA8K310HPOqMpjh",
+          "name": "Slack account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "c1",
+              "leftValue": "={{ $json.user }}",
+              "rightValue": "U07K3M742J0",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            },
+            {
+              "id": "c2",
+              "leftValue": "={{ $json.reaction }}",
+              "rightValue": "white_check_mark",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "name": "Founder Checkmark?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1200,
+        80
+      ],
+      "id": "bf525976-cd28-4777-9ef1-520647bcf591"
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "tableId": "linkedin_posts",
+        "filterType": "string",
+        "filterString": "=slack_message_ts=eq.{{ $json.item.ts }}&status=eq.awaiting_approval",
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "status",
+              "fieldValue": "approved"
+            },
+            {
+              "fieldId": "approved_by",
+              "fieldValue": "={{ $json.user }}"
+            },
+            {
+              "fieldId": "approved_at",
+              "fieldValue": "={{ $now.toISO() }}"
+            },
+            {
+              "fieldId": "updated_at",
+              "fieldValue": "={{ $now.toISO() }}"
+            }
+          ]
+        }
+      },
+      "name": "Approve Post",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        1408,
+        -32
+      ],
+      "id": "4d3966d5-7c4c-4a46-8df4-f5db4230bb5b",
+      "credentials": {
+        "supabaseApi": {
+          "id": "VGf8DmNx8k99Z696",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "parameters": {},
+      "name": "Ignore",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        1408,
+        176
+      ],
+      "id": "0e64091f-3970-41e1-b9b7-26d9f432eb58"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Reaction Added": {
+      "main": [
+        [
+          {
+            "node": "Founder Checkmark?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Founder Checkmark?": {
+      "main": [
+        [
+          {
+            "node": "Approve Post",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Ignore",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "098d37d5-beed-46c5-bbb3-e2a80d3b3f33",
+  "meta": {
+    "instanceId": "6af2903b4dbb761a67d465cd1d34829029abeb1b3b7e8d9193566eaad571a21d"
+  },
+  "nodeGroups": [],
+  "id": "412Zv44knzYACXla",
+  "tags": []
+}

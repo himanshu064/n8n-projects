@@ -1,0 +1,664 @@
+{
+  "name": "LinkedIn - 2 Weekly Generator",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## WF2 - Weekly Generator (Sunday 6 PM IST, or press the demo button)\nNext 7 rows of the running order -> Coordinator (Claude Haiku 4.5) -> Writer (Claude Opus 5) -> QA (Claude Haiku 4.5), max 2 rewrites -> upsert into linkedin_posts -> one Slack parent + 7 thread replies -> rows become awaiting_approval.\n\nSafe to re-run: posts are upserted on scheduled_date.\nReplace C0BRXF8G5FY in both Slack nodes.",
+        "height": 240,
+        "width": 1100,
+        "color": 6
+      },
+      "name": "Note b65f2b",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -880,
+        -608
+      ],
+      "id": "416ba6b2-3f3a-4e50-99de-40d24583559b"
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "weeks",
+              "triggerAtHour": 18
+            }
+          ]
+        }
+      },
+      "name": "Every Sunday 6 PM IST",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -848,
+        -192
+      ],
+      "id": "65ad1e02-9588-41a0-ba87-459f636e0199"
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "tableId": "linkedin_running_order",
+        "returnAll": true,
+        "filterType": "string",
+        "filterString": "=scheduled_date=gte.{{ $now.plus($execution.mode === 'production' ? 1 : 0, 'day').toFormat('yyyy-MM-dd')}}&order=scheduled_date.asc&limit=7"
+      },
+      "name": "Fetch Week",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        -624,
+        -192
+      ],
+      "id": "1d445334-4579-4e8a-ac58-659dc83a629c",
+      "credentials": {
+        "supabaseApi": {
+          "id": "VGf8DmNx8k99Z696",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "name": "Loop Over Items",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        -416,
+        -192
+      ],
+      "id": "9915b437-67c2-43e9-b10e-d70a6f14e6ae"
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "value": "claude-haiku-4-5",
+          "mode": "id"
+        },
+        "messages": {
+          "values": [
+            {
+              "content": "=Produce a post brief as JSON with exactly these keys:\n{\"angle\": \"...\", \"audience\": \"...\", \"key_points\": [\"...\",\"...\",\"...\"], \"cta\": \"...\"}\n\nBusiness process (topic): {{ $json.process_name }}\nPost style: {{ $json.style }}\nPublish date: {{ $json.scheduled_date }}"
+            }
+          ]
+        },
+        "options": {
+          "includeMergedResponse": true,
+          "system": "PLACEHOLDER - replace with the client's Coordinator system prompt.\nYou plan LinkedIn posts for FullSpec (gofullspec.com). Reply with ONLY valid JSON, no markdown fences.",
+          "maxTokens": 1024,
+          "temperature": 0.7
+        }
+      },
+      "name": "Coordinator",
+      "type": "@n8n/n8n-nodes-langchain.anthropic",
+      "typeVersion": 1,
+      "position": [
+        -192,
+        16
+      ],
+      "id": "809b7aec-3bab-4e02-8742-d4eaa24b32d3",
+      "credentials": {
+        "anthropicApi": {
+          "id": "wF2jPXF99ghyk8rs",
+          "name": "Anthropic account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const raw = $json.merged_response ?? $json.content?.find?.(c => c.type === 'text')?.text ?? $json.message?.content ?? $json.output ?? $json.text ?? '';\nlet obj;\ntry { obj = typeof raw === 'object' ? raw : JSON.parse(String(raw).replace(/^```(json)?/m, '').replace(/```$/m, '').trim()); }\ncatch (e) { throw new Error('Model returned invalid JSON: ' + String(raw).slice(0, 200)); }\nconst row = $('Loop Over Items').item.json;   // the running-order row\nreturn [{ json: { ...row, brief: obj, revision_count: 0, qa_feedback: '', post_text: '' } }];"
+      },
+      "name": "Parse Brief",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        32,
+        16
+      ],
+      "id": "e577d52c-2d72-4eab-a567-c80764ebb97c"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": []
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "name": "Writer Input",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        256,
+        16
+      ],
+      "id": "bcc8ce4b-d092-421e-8c39-2883f5ca5e65"
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "value": "claude-sonnet-5",
+          "mode": "list",
+          "cachedResultName": "claude-sonnet-5"
+        },
+        "messages": {
+          "values": [
+            {
+              "content": "=Style: {{ $json.style }}\nBrief: {{ JSON.stringify($json.brief) }}\n{{ $json.qa_feedback ? \"\\nA reviewer rejected the previous draft. Fix this feedback: \" + $json.qa_feedback + \"\\nPrevious draft:\\n\" + $json.post_text : \"\" }}\n\nReturn only the post text."
+            }
+          ]
+        },
+        "options": {
+          "includeMergedResponse": true,
+          "system": "PLACEHOLDER - replace with the client's Writer system prompt + voice guide + style definitions.\nYou write LinkedIn posts for a company page. Plain text only, no markdown, no hashtag spam, under 1300 characters, first line is a strong hook.",
+          "maxTokens": 1024
+        }
+      },
+      "name": "Writer",
+      "type": "@n8n/n8n-nodes-langchain.anthropic",
+      "typeVersion": 1,
+      "position": [
+        464,
+        16
+      ],
+      "id": "b3ff9430-2b7d-48d1-8246-3e9d596eb68c",
+      "credentials": {
+        "anthropicApi": {
+          "id": "wF2jPXF99ghyk8rs",
+          "name": "Anthropic account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const ctx = $('Writer Input').item.json;\nconst raw = $json.merged_response ?? $json.content?.find?.(c => c.type === 'text')?.text ?? $json.message?.content ?? $json.output ?? $json.text ?? '';\nconst draft = String(raw).trim();\nif (!draft) throw new Error('Writer returned an empty post');\nreturn [{ json: { ...ctx, post_text: draft } }];"
+      },
+      "name": "Attach Draft",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        688,
+        16
+      ],
+      "id": "a1b28284-e10a-4c90-9948-f33664009bc3"
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "value": "claude-haiku-4-5",
+          "mode": "id"
+        },
+        "messages": {
+          "values": [
+            {
+              "content": "=Score this post against the rubric and reply as JSON: {\"approved\": true|false, \"score\": 0-100, \"feedback\": \"one sentence, empty if approved\"}\nRubric: first line is a hook; matches style \"{{ $json.style }}\"; plain professional voice; no cliches like \"game-changer\"; under 1300 characters; has a clear CTA.\n\nPost to review:\n{{ $json.post_text }}"
+            }
+          ]
+        },
+        "options": {
+          "includeMergedResponse": true,
+          "system": "PLACEHOLDER - replace with the client's QA rubric.\nYou are a strict LinkedIn post reviewer. Reply with ONLY valid JSON, no markdown fences.",
+          "maxTokens": 1024,
+          "temperature": 0.7
+        }
+      },
+      "name": "QA",
+      "type": "@n8n/n8n-nodes-langchain.anthropic",
+      "typeVersion": 1,
+      "position": [
+        912,
+        16
+      ],
+      "id": "18bfef41-69d9-4000-938f-a4f48f70150f",
+      "credentials": {
+        "anthropicApi": {
+          "id": "wF2jPXF99ghyk8rs",
+          "name": "Anthropic account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const raw = $json.merged_response ?? $json.content?.find?.(c => c.type === 'text')?.text ?? $json.message?.content ?? $json.output ?? $json.text ?? '';\nlet obj;\ntry { obj = typeof raw === 'object' ? raw : JSON.parse(String(raw).replace(/^```(json)?/m, '').replace(/```$/m, '').trim()); }\ncatch (e) { throw new Error('Model returned invalid JSON: ' + String(raw).slice(0, 200)); }\nconst ctx = $('Attach Draft').item.json;\nconst approved = obj.approved === true || String(obj.approved).toLowerCase() === 'true';\nreturn [{ json: { ...ctx, approved, qa_score: Number(obj.score ?? 0), qa_feedback: approved ? '' : String(obj.feedback ?? ''),\n  revision_count: approved ? ctx.revision_count : ctx.revision_count + 1 } }];"
+      },
+      "name": "Parse Verdict",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1136,
+        16
+      ],
+      "id": "cd682f83-4b3e-48c5-a6e2-0da1e6963f77"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "c1",
+              "leftValue": "={{ $json.approved || $json.revision_count >= 2 }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "name": "QA Passed or Retries Exhausted?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1344,
+        16
+      ],
+      "id": "7d0ed762-f62d-4e5d-8f4d-3b6808eb5176"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://ttexzguqbewayozgmojf.supabase.co/rest/v1/linkedin_posts?on_conflict=scheduled_date",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "supabaseApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Prefer",
+              "value": "resolution=merge-duplicates,return=minimal"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ running_order_id: $json.id, scheduled_date: $json.scheduled_date, status: $json.approved ? 'qa_passed' : 'needs_manual_review', coordinator_brief: $json.brief, post_text: $json.post_text, qa_score: $json.qa_score, qa_feedback: { approved: $json.approved, feedback: $json.qa_feedback }, revision_count: $json.revision_count, slack_message_ts: null, slack_channel_id: null, approved_by: null, approved_at: null, published_at: null, publish_ref: null, error_detail: null, updated_at: $now.toISO() }) }}",
+        "options": {}
+      },
+      "name": "Save Post",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1584,
+        -208
+      ],
+      "id": "2a4aa6d8-946d-4a45-9240-aa46ebf6050e",
+      "credentials": {
+        "supabaseApi": {
+          "id": "VGf8DmNx8k99Z696",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "C0BRXF8G5FY"
+        },
+        "text": "=📅 LinkedIn posts for the week starting {{ $('Fetch Week').first().json.scheduled_date }}. React ✅ on a post in this thread to approve it. No reaction = not published.",
+        "otherOptions": {}
+      },
+      "name": "Slack Parent",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.3,
+      "position": [
+        -192,
+        -288
+      ],
+      "executeOnce": true,
+      "id": "48ecac4f-4f47-42a0-8413-f39f7e4a96d4",
+      "webhookId": "d8f8e481-221b-4f49-a03d-561e7cdbd755",
+      "credentials": {
+        "slackApi": {
+          "id": "lWA8K310HPOqMpjh",
+          "name": "Slack account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "tableId": "linkedin_posts",
+        "returnAll": true,
+        "filterType": "string",
+        "filterString": "=scheduled_date=gte.{{ $('Fetch Week').first().json.scheduled_date }}&scheduled_date=lte.{{ $('Fetch Week').last().json.scheduled_date }}&status=in.(qa_passed,needs_manual_review)&order=scheduled_date.asc"
+      },
+      "name": "Fetch Saved Posts",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        32,
+        -288
+      ],
+      "id": "629ee7c9-0d06-439e-aa69-fc76fd6c3ee2",
+      "credentials": {
+        "supabaseApi": {
+          "id": "VGf8DmNx8k99Z696",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "C0BRXF8G5FY"
+        },
+        "text": "=*{{ $json.scheduled_date }}*{{ $json.status === 'needs_manual_review' ? '  ⚠️ QA failed after 3 attempts — read carefully' : '' }}  (QA score {{ $json.qa_score }})\n\n{{ $json.post_text }}",
+        "otherOptions": {
+          "thread_ts": {
+            "replyValues": {
+              "thread_ts": "={{ $('Slack Parent').first().json.message_timestamp ?? $('Slack Parent').first().json.ts ?? $('SlackParent').first().json.message?.ts }}"
+            }
+          }
+        }
+      },
+      "name": "Slack Thread Post",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.3,
+      "position": [
+        256,
+        -288
+      ],
+      "id": "e0cfc8dc-4e91-422a-a3cd-bc92f6156365",
+      "webhookId": "5632ba4e-eb3c-4718-aa23-949a40962d85",
+      "credentials": {
+        "slackApi": {
+          "id": "lWA8K310HPOqMpjh",
+          "name": "Slack account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "tableId": "linkedin_posts",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "id",
+              "condition": "eq",
+              "keyValue": "={{ $('Fetch Saved Posts').all()[$itemIndex].json.id }}"
+            }
+          ]
+        },
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "slack_message_ts",
+              "fieldValue": "={{ $json.message_timestamp ?? $json.ts ?? $json.message?.ts }}"
+            },
+            {
+              "fieldId": "slack_channel_id",
+              "fieldValue": "={{ $json.channel }}"
+            },
+            {
+              "fieldId": "status",
+              "fieldValue": "awaiting_approval"
+            },
+            {
+              "fieldId": "updated_at",
+              "fieldValue": "={{ $now.toISO() }}"
+            }
+          ]
+        }
+      },
+      "name": "Store Slack TS",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        464,
+        -288
+      ],
+      "id": "f7c64a8d-8dea-4e44-bced-d4212afec3bc",
+      "credentials": {
+        "supabaseApi": {
+          "id": "VGf8DmNx8k99Z696",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "parameters": {},
+      "name": "Run Now (demo button)",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -848,
+        -368
+      ],
+      "id": "c1ce0d62-1ad7-42e4-9675-2e4726e7d985"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Fetch Week": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop Over Items": {
+      "main": [
+        [
+          {
+            "node": "Slack Parent",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Coordinator",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Coordinator": {
+      "main": [
+        [
+          {
+            "node": "Parse Brief",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Brief": {
+      "main": [
+        [
+          {
+            "node": "Writer Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Writer Input": {
+      "main": [
+        [
+          {
+            "node": "Writer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Writer": {
+      "main": [
+        [
+          {
+            "node": "Attach Draft",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Attach Draft": {
+      "main": [
+        [
+          {
+            "node": "QA",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "QA": {
+      "main": [
+        [
+          {
+            "node": "Parse Verdict",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Verdict": {
+      "main": [
+        [
+          {
+            "node": "QA Passed or Retries Exhausted?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "QA Passed or Retries Exhausted?": {
+      "main": [
+        [
+          {
+            "node": "Save Post",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Writer Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save Post": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Slack Parent": {
+      "main": [
+        [
+          {
+            "node": "Fetch Saved Posts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Saved Posts": {
+      "main": [
+        [
+          {
+            "node": "Slack Thread Post",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Slack Thread Post": {
+      "main": [
+        [
+          {
+            "node": "Store Slack TS",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Every Sunday 6 PM IST": {
+      "main": [
+        [
+          {
+            "node": "Fetch Week",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run Now (demo button)": {
+      "main": [
+        [
+          {
+            "node": "Fetch Week",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "timeSavedMode": "fixed",
+    "errorWorkflow": "SQnMVoySRJgU9XOI",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
+  },
+  "versionId": "4e414f8a-f9f8-4659-9c8b-81b173954f27",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "6af2903b4dbb761a67d465cd1d34829029abeb1b3b7e8d9193566eaad571a21d"
+  },
+  "nodeGroups": [],
+  "id": "rczrNU4DI5YF0b2s",
+  "tags": []
+}
