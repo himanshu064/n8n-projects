@@ -21,5 +21,4 @@ venv/
 running-order-sample.xlsx
 
 .claude
-config.bat
 node_modules
