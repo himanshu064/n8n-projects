@@ -1,5 +1,4 @@
 # Environment variables / secrets
-!.env.example
 
 # Python
 __pycache__/
@@ -22,3 +21,6 @@ running-order-sample.xlsx
 
 .claude
 node_modules
+
+.env*
+!.env.example
